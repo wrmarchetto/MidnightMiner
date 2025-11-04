@@ -822,6 +822,8 @@ def display_dashboard(status_dict, num_workers, stats_update_interval=600):
     """Display live dashboard of all miners with proper alignment and simple coloring"""
 
     last_stats_update = 0
+    last_challenges_update = 0
+    current_day_stats = None
 
     while True:
         try:
@@ -841,6 +843,71 @@ def display_dashboard(status_dict, num_workers, stats_update_interval=600):
             )
             print("=" * 110)
             print()
+
+            # Show current day stats (reload every 10 seconds)
+            try:
+                if time.time() - last_challenges_update > 10:
+                    last_challenges_update = time.time()
+                    # Read challenges.json safely
+                    try:
+                        with open("challenges.json", "r") as cf:
+                            challenges_data = json.load(cf)
+                    except Exception:
+                        challenges_data = {}
+
+                    # Determine largest day number
+                    max_day = None
+                    day_entries = {}
+                    for cid, data in (challenges_data or {}).items():
+                        try:
+                            d = data.get("day")
+                        except Exception:
+                            d = None
+                        if d is None:
+                            continue
+                        if (max_day is None) or (d > max_day):
+                            max_day = d
+
+                    if max_day is not None:
+                        # Collect entries for this day
+                        rows = []
+                        for cid, data in (challenges_data or {}).items():
+                            try:
+                                if data.get("day") == max_day:
+                                    chal_num = data.get("challenge_number")
+                                    solved_by = data.get("solved_by") or []
+                                    rows.append((chal_num, cid, len(solved_by)))
+                            except Exception:
+                                continue
+
+                        # Sort by challenge number if available
+                        try:
+                            rows.sort(key=lambda r: (r[0] is None, r[0]))
+                        except Exception:
+                            pass
+
+                        current_day_stats = (max_day, rows)
+                    else:
+                        current_day_stats = None
+
+            except Exception:
+                # Don't let stats printing crash the dashboard
+                current_day_stats = None
+
+            # Print Current Day Stats section if available
+            if current_day_stats:
+                max_day, rows = current_day_stats
+                print("\n" + "=" * 55)
+                print(f"Current Day Stats (Day {max_day})")
+                print("=" * 55 + "\n")
+                print(
+                    f"{'Challenge Number':<18} | {'Challenge ID':<16} | {'# Solutions':<12}"
+                )
+                print("-" * 54)
+                for chal_num, cid, solved_count in rows:
+                    chal_num_display = str(chal_num) if chal_num is not None else "-"
+                    print(f"{chal_num_display:<18} | {cid:<16} | {solved_count:<12}")
+                print()
 
             # Table header
             header = f"{'ID':<4} {'Address':<44} {'Challenge':<20} {'Attempts':<10} {'H/s':<8} {'Completed':<10} {'NIGHT':<10}"
